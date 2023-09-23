@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  dj-mariadb:
+    command:
+      - --max-connections=1000
+      - --max_allowed_packet=130023424
+    image: mariadb
+    container_name: dj-mariadb
+    environment:
+      CONTAINER_TIMEZONE: Australia/Perth
+      MYSQL_ROOT_PASSWORD: rootpw
+      MYSQL_USER: domjudge
+      MYSQL_PASSWORD: djpw
+      MYSQL_DATABASE: domjudge
+    volumes:
+      - type: bind
+        source: /var/lib/mysql
+        target: /var/lib/mysql
+    ports:
+      - 13306:3306
+    restart: always
+
+  domserver:
+    image: domjudge/domserver:latest
+    container_name: domserver
+    environment:
+      CONTAINER_TIMEZONE: Australia/Perth
+      MYSQL_HOST: mariadb
+      MYSQL_USER: domjudge
+      MYSQL_DATABASE: domjudge
+      MYSQL_PASSWORD: djpw
+      MYSQL_ROOT_PASSWORD: rootpw
+    volumes:
+      - ./nginx/ssl.conf:/etc/nginx/sites-enabled/default
+      - /etc/letsencrypt:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+      - ./php.ini:/etc/php/7.4/fpm/pool.d/domjudge.conf
+    ports:
+      - 80:80
+      - 443:443
+    links:
+      - dj-mariadb:mariadb
+    restart: always
+
+  judgehost-0:
+    image: domjudge/judgehost:latest
+    container_name: judgehost-0
+    hostname: judgedaemon
+    environment:
+      CONTAINER_TIMEZONE: Australia/Perth
+      DAEMON_ID: 0
+      DOMSERVER_BASEURL: https://domjudge.pcs.org.au/
+      JUDGEDAEMON_PASSWORD: ""
+    volumes:
+      - type: bind
+        source: /sys/fs/cgroup
+        target: /sys/fs/cgroup
+        read_only: true
+    # command: c_rehash
+    links:
+      - domserver:domserver
+    depends_on:
+      - domserver
+    privileged: true
+    restart: always
